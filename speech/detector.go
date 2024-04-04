@@ -155,6 +155,35 @@ type Segment struct {
 	SpeechEndAt float64
 }
 
+type Prob struct {
+	Timestamp float64
+	// The probability of speech.
+	Speech float32
+}
+
+func (sd *Detector) Probs(pcm []float32) ([]Prob, error) {
+	if sd == nil {
+		return nil, fmt.Errorf("invalid nil detector")
+	}
+	if len(pcm) < sd.cfg.WindowSize {
+		return nil, fmt.Errorf("not enough samples")
+	}
+	speechPadSamples := sd.cfg.SpeechPadMs * sd.cfg.SampleRate / 1000
+
+	var probs []Prob
+	for i := 0; i < len(pcm)-sd.cfg.WindowSize; i += sd.cfg.WindowSize {
+		speechProb, err := sd.infer(pcm[i : i+sd.cfg.WindowSize])
+		if err != nil {
+			return nil, fmt.Errorf("infer failed: %w", err)
+		}
+		sd.currSample += sd.cfg.WindowSize
+		at := (float64(sd.currSample-sd.cfg.WindowSize-speechPadSamples) / float64(sd.cfg.SampleRate))
+		probs = append(probs, Prob{Speech: speechProb, Timestamp: at})
+	}
+
+	return probs, nil
+}
+
 func (sd *Detector) Detect(pcm []float32) ([]Segment, error) {
 	if sd == nil {
 		return nil, fmt.Errorf("invalid nil detector")
